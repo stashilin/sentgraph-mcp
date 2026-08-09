@@ -21,6 +21,7 @@ go test ./internal/config                        # тесты одного па�
 go test ./internal/hooks -run TestHandle         # один тест
 go vet ./...                                     # статический анализ
 go run . doctor --online                         # проверка конфига + связи с Zep (нужен .env.local)
+go run ./scripts/backfill -kind day -src <day.jsonl> -user <id>   # перелив истории в память (dry-run; -apply для отправки)
 ```
 
 Локальная сборка имеет версию `dev`; релизная инжектится через `-ldflags "-X main.version=..."` (GoReleaser).
@@ -53,3 +54,6 @@ go run . doctor --online                         # проверка конфиг
 
 - README, комментарии-докстроки в плагине и сообщения коммитов — на русском; идентификаторы и код — на английском.
 - Дизайн-заметки: `docs/implementation-plan.md`, `zep-memory.md`.
+- Перелив истории в память (день с аудио/скринрекордера, архивы разговоров, доки) — `docs/backfill.md`
+  + `scripts/backfill` (Batch API Zep, redact перед отправкой, манифест с `last_event_at` против дублей).
+  В основной бинарь эта команда намеренно не вшита.

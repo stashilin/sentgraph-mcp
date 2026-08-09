@@ -14,3 +14,6 @@
 # Secrets (per-developer; never commit)
 .env
 .env.local
+
+# backfill: манифесты и превью переливов (личные данные)
+/.ingest/
