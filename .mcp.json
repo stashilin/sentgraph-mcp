@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "sentgraph": {
+      "command": "sentgraph-mcp",
+      "args": [
+        "serve"
+      ],
+      "env": {
+        "SENTGRAPH_PROJECT_ID": "aggr"
+      }
+    }
+  }
+}
