@@ -45,11 +45,11 @@ changelog:
 homebrew_casks:
   - name: sentgraph-mcp
     repository:
-      owner: shilin23061991
+      owner: stashilin
       name: homebrew-tap
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    homepage: "https://github.com/shilin23061991/sentgraph-mcp"
+    homepage: "https://github.com/stashilin/sentgraph-mcp"
     description: "Zep Cloud-backed long-term memory MCP server for coding agents."
     binaries:
       - sentgraph-mcp

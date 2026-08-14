@@ -15,7 +15,7 @@ import (
 
 // runServe starts the MCP server. With --http it serves Streamable HTTP,
 // otherwise it serves over stdio (how Claude Code / Cursor launch it).
-func runServe(ctx context.Context, args []string) error {
+func runServe(ctx context.Context, args []string, version string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	httpAddr := fs.String("http", "", "serve Streamable HTTP on this address (e.g. :8080); empty = stdio")
 	if err := fs.Parse(args); err != nil {
@@ -30,7 +30,7 @@ func runServe(ctx context.Context, args []string) error {
 		return err
 	}
 	store := zepstore.New(cfg.ZepAPIKey)
-	server := mcpserver.New(memory.New(cfg, store), "0.4.0")
+	server := mcpserver.New(memory.New(cfg, store), version)
 
 	if *httpAddr == "" {
 		return server.Run(ctx, &mcp.StdioTransport{})

@@ -36,7 +36,7 @@ func main() {
 	var err error
 	switch os.Args[1] {
 	case "serve":
-		err = runServe(ctx, os.Args[2:])
+		err = runServe(ctx, os.Args[2:], version)
 	case "hook":
 		err = runHook(ctx, os.Args[2:])
 	case "doctor":
