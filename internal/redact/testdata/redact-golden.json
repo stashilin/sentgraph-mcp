@@ -1,0 +1,170 @@
+[
+  {
+    "name": "openai_key",
+    "why": "single sk- key mid-sentence",
+    "in": "key is sk-aA1bB2cCaA1bB2cCaA1bB2cC keep going",
+    "out": "key is [REDACTED] keep going",
+    "in_runes": 45
+  },
+  {
+    "name": "github_token",
+    "why": "classic gh token",
+    "in": "token ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa end",
+    "out": "token [REDACTED] end",
+    "in_runes": 50
+  },
+  {
+    "name": "github_pat",
+    "why": "fine-grained PAT",
+    "in": "pat github_pat_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "out": "pat [REDACTED]",
+    "in_runes": 45
+  },
+  {
+    "name": "aws_key_id",
+    "why": "AWS access key id",
+    "in": "aws AKIAQQQQQQQQQQQQQQQQ region us-east-1",
+    "out": "aws [REDACTED] region us-east-1",
+    "in_runes": 41
+  },
+  {
+    "name": "google_key",
+    "why": "Google API key",
+    "in": "google AIzaccccccccccccccccccccccccccccccccccc",
+    "out": "google [REDACTED]",
+    "in_runes": 46
+  },
+  {
+    "name": "slack_token",
+    "why": "Slack bot token",
+    "in": "slack xoxb-999999999999-abcdefghij",
+    "out": "slack [REDACTED]",
+    "in_runes": 34
+  },
+  {
+    "name": "jwt",
+    "why": "three-segment JWT",
+    "in": "auth eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.aaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbb done",
+    "out": "auth [REDACTED] done",
+    "in_runes": 88
+  },
+  {
+    "name": "bearer_header",
+    "why": "Authorization header",
+    "in": "Authorization: Bearer xy7Zxy7Zxy7Zxy7Zxy7Z",
+    "out": "Authorization: [REDACTED]",
+    "in_runes": 42
+  },
+  {
+    "name": "bearer_lowercase",
+    "why": "case-insensitive match: Go uses (?i), JS needs the i flag",
+    "in": "authorization: bearer xy7Zxy7Zxy7Zxy7Zxy7Z",
+    "out": "authorization: [REDACTED]",
+    "in_runes": 42
+  },
+  {
+    "name": "bearer_uppercase",
+    "why": "same, upper case",
+    "in": "AUTHORIZATION: BEARER xy7Zxy7Zxy7Zxy7Zxy7Z",
+    "out": "AUTHORIZATION: [REDACTED]",
+    "in_runes": 42
+  },
+  {
+    "name": "two_same_shape",
+    "why": "two sk- keys: JS String.replace without /g redacts only the first",
+    "in": "sk-aA1bB2cCaA1bB2cCaA1bB2cC and sk-zZ9yY8xXzZ9yY8xXzZ9yY8xX",
+    "out": "[REDACTED] and [REDACTED]",
+    "in_runes": 59
+  },
+  {
+    "name": "three_same_shape",
+    "why": "three of a kind in one line",
+    "in": "sk-aA1bB2cCaA1bB2cCaA1bB2cC sk-zZ9yY8xXzZ9yY8xXzZ9yY8xX sk-aA1bB2cCaA1bB2cCaA1bB2cC",
+    "out": "[REDACTED] [REDACTED] [REDACTED]",
+    "in_runes": 83
+  },
+  {
+    "name": "same_shape_multiline",
+    "why": "repeats across lines",
+    "in": "line1 ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nline2 ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nline3 clean",
+    "out": "line1 [REDACTED]\nline2 [REDACTED]\nline3 clean",
+    "in_runes": 105
+  },
+  {
+    "name": "mixed_shapes_repeated",
+    "why": "several shapes, each twice",
+    "in": "sk-aA1bB2cCaA1bB2cCaA1bB2cC AKIAQQQQQQQQQQQQQQQQ sk-zZ9yY8xXzZ9yY8xXzZ9yY8xX AKIAQQQQQQQQQQQQQQQQ",
+    "out": "[REDACTED] [REDACTED] [REDACTED] [REDACTED]",
+    "in_runes": 97
+  },
+  {
+    "name": "clean_text",
+    "why": "no secrets: output must equal input byte for byte",
+    "in": "Пользователь предпочитает табы и Go 1.25.",
+    "out": "Пользователь предпочитает табы и Go 1.25.",
+    "in_runes": 41
+  },
+  {
+    "name": "cyrillic_around_secret",
+    "why": "Cyrillic neighbours must survive intact",
+    "in": "ключ sk-aA1bB2cCaA1bB2cCaA1bB2cC конец",
+    "out": "ключ [REDACTED] конец",
+    "in_runes": 38
+  },
+  {
+    "name": "emoji_around_secret",
+    "why": "non-BMP characters adjacent to a match",
+    "in": "🔑👨‍👩‍👧‍👦 sk-aA1bB2cCaA1bB2cCaA1bB2cC 🚀",
+    "out": "🔑👨‍👩‍👧‍👦 [REDACTED] 🚀",
+    "in_runes": 38
+  },
+  {
+    "name": "secret_at_start",
+    "why": "match at offset 0",
+    "in": "sk-aA1bB2cCaA1bB2cCaA1bB2cC trailing",
+    "out": "[REDACTED] trailing",
+    "in_runes": 36
+  },
+  {
+    "name": "secret_at_end",
+    "why": "match touching end of string",
+    "in": "leading sk-aA1bB2cCaA1bB2cCaA1bB2cC",
+    "out": "leading [REDACTED]",
+    "in_runes": 35
+  },
+  {
+    "name": "only_secret",
+    "why": "the whole string is one secret",
+    "in": "sk-aA1bB2cCaA1bB2cCaA1bB2cC",
+    "out": "[REDACTED]",
+    "in_runes": 27
+  },
+  {
+    "name": "adjacent_secrets",
+    "why": "two matches with no separator",
+    "in": "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaask-aA1bB2cCaA1bB2cCaA1bB2cC",
+    "out": "[REDACTED][REDACTED]",
+    "in_runes": 67
+  },
+  {
+    "name": "empty",
+    "why": "empty input",
+    "in": "",
+    "out": "",
+    "in_runes": 0
+  },
+  {
+    "name": "near_miss_short_sk",
+    "why": "too short to match: must NOT be redacted",
+    "in": "sk-short",
+    "out": "sk-short",
+    "in_runes": 8
+  },
+  {
+    "name": "near_miss_word_bearer",
+    "why": "the word bearer without a token stays",
+    "in": "the bearer of bad news",
+    "out": "the bearer of bad news",
+    "in_runes": 22
+  }
+]

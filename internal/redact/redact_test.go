@@ -54,6 +54,32 @@ func TestSecretsRedactsMultiple(t *testing.T) {
 	}
 }
 
+// Two secrets of the SAME shape must both go. TestSecretsRedactsMultiple uses
+// two different patterns, so it passes even when a port replaces only the first
+// match per pattern -- exactly what JavaScript's String.replace does without
+// the /g flag, where Go's ReplaceAllString replaces every occurrence. This test
+// is the one that fails on such a port, so it exists before any port does.
+func TestSecretsRedactsRepeatsOfSamePattern(t *testing.T) {
+	repeats := map[string][]string{
+		"openai":     {"sk" + "-" + strings.Repeat("aA1bB2cC", 3), "sk" + "-" + strings.Repeat("zZ9yY8xX", 3)},
+		"github":     {"gh" + "p_" + strings.Repeat("a", 36), "gh" + "p_" + strings.Repeat("b", 36)},
+		"aws":        {"AK" + "IA" + strings.Repeat("Q", 16), "AK" + "IA" + strings.Repeat("R", 16)},
+		"bearer":     {"Bearer " + strings.Repeat("xy7Z", 5), "bearer " + strings.Repeat("qW3e", 5)},
+		"three_keys": {"sk" + "-" + strings.Repeat("a1B2c3D4", 2), "sk" + "-" + strings.Repeat("e5F6g7H8", 2), "sk" + "-" + strings.Repeat("i9J0k1L2", 2)},
+	}
+	for name, secrets := range repeats {
+		t.Run(name, func(t *testing.T) {
+			in := "start " + strings.Join(secrets, " middle ") + " end"
+			got := Secrets(in)
+			for i, secret := range secrets {
+				if strings.Contains(got, secret) {
+					t.Fatalf("secret #%d of the same shape survived: %q", i+1, got)
+				}
+			}
+		})
+	}
+}
+
 func TestSecretsRedactsAtBoundaries(t *testing.T) {
 	secret := "gh" + "p_" + strings.Repeat("a", 36)
 	cases := []string{
