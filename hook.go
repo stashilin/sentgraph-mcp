@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -19,9 +20,16 @@ func runHook(ctx context.Context, args []string) error {
 	}
 	event := args[0]
 	cfg := config.Load()
-	if !cfg.EnvFilePresent {
-		// No project .env.local: stay silent so a global (user-scope) install
-		// does not spam hook errors in unrelated projects.
+	if err := cfg.RequireProjectConfig(); err != nil {
+		if errors.Is(err, config.ErrProjectNotConfigured) {
+			// This project never opted into sentgraph: stay silent so a global
+			// (user-scope) install does not spam hook errors elsewhere.
+			return nil
+		}
+		// A project that did opt in but whose .env.local is broken must say so,
+		// or a stray typo silently disables memory forever. Warn on stderr and
+		// exit 0: a setup mistake should not fail the user's turn.
+		fmt.Fprintf(os.Stderr, "sentgraph: %v\n", err)
 		return nil
 	}
 	if err := cfg.Validate(); err != nil {

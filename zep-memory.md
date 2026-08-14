@@ -20,7 +20,7 @@ The only local processing before cloud writes is secret redaction and Zep limit 
 
 ## Configuration
 
-Resolved from environment variables; all three identity values are required. sentgraph-mcp loads a per-project `.env.local` at startup via godotenv (non-override: existing env wins, the file fills gaps), and `serve`/`doctor` refuse to run without one -- this keeps the plugin project-scoped and guards against global installs. See `.env.example`.
+Resolved from environment variables; all three identity values are required. The environment wins: keys left unset there are filled from a `.env.local` in the project directory itself (`CLAUDE_PROJECT_DIR`, else the working directory), loaded via godotenv (non-override). Parent directories are never searched, so a file one level up cannot configure unrelated projects. `serve`/`doctor` refuse to run -- and hooks exit quietly -- in a directory that has neither the required keys in its environment nor its own `.env.local`, which keeps the plugin project-scoped and guards against global installs. See `.env.example`.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |

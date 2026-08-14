@@ -194,7 +194,7 @@ sentgraph-mcp/
 ## 11. Статус реализации
 
 - [x] Скелет: `go.mod` (go 1.25) + зависимости; main-пакет в корне (бинарь `sentgraph-mcp`) с режимами `serve`/`hook`/`doctor`.
-- [x] `internal/config`: обязательные ключи ZEP_API_KEY, ZEP_USER_ID, SENTGRAPH_PROJECT_ID из env, с автозагрузкой `.env.local` (godotenv, non-override) и хард-требованием `.env.local` для serve/doctor, тумблеры.
+- [x] `internal/config`: обязательные ключи ZEP_API_KEY, ZEP_USER_ID, SENTGRAPH_PROJECT_ID из env, с автозагрузкой `.env.local` из директории самого проекта (godotenv, non-override; вверх по дереву не ищем) и требованием настроенного проекта для serve/doctor — ключи в env либо свой `.env.local`, тумблеры.
 - [x] `internal/redact`: вырезание секретов (API key, JWT, AWS/GCP, bearer).
 - [x] `internal/zepstore` + `internal/memory`: `EnsureIdentity`, `GetContext`, `AddTurn` (return_context), `Search`, `AddData` (чанк >10k), `History`, `Forget`.
 - [x] `internal/mcpserver`: регистрация 6 инструментов с аннотациями; запуск stdio и Streamable HTTP.

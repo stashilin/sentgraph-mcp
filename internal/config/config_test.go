@@ -67,7 +67,10 @@ func TestLoadEnvFileFillsUnsetAndKeepsExisting(t *testing.T) {
 	}
 }
 
-func TestLoadEnvFileFoundUpward(t *testing.T) {
+// A .env.local above the project directory must never configure it: parent
+// directories are deliberately not searched, so one stray file cannot leak keys
+// into every project below it.
+func TestLoadEnvFileIgnoresAncestors(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, ".env.local"), "SENTGRAPH_PROJECT_ID=mono\n")
 	child := filepath.Join(root, "services", "api")
@@ -77,8 +80,125 @@ func TestLoadEnvFileFoundUpward(t *testing.T) {
 	t.Setenv("CLAUDE_PROJECT_DIR", child)
 	unset(t, "SENTGRAPH_PROJECT_ID")
 
-	if got := Load().ProjectID; got != "mono" {
-		t.Fatalf("ProjectID = %q, want mono from ancestor .env.local", got)
+	cfg := Load()
+	if cfg.ProjectID != "" {
+		t.Fatalf("ProjectID = %q, want empty: ancestor .env.local must be ignored", cfg.ProjectID)
+	}
+	if cfg.EnvFilePresent {
+		t.Fatal("EnvFilePresent must be false when only an ancestor has .env.local")
+	}
+	if err := cfg.RequireProjectConfig(); err == nil {
+		t.Fatal("a project configured only by an ancestor file must not pass the scope gate")
+	}
+}
+
+// The working directory is the project directory when CLAUDE_PROJECT_DIR is
+// unset -- the case for every agent that does not set it (Codex, Amp, omp).
+func TestLoadEnvFileFromWorkingDir(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, ".env.local"), "SENTGRAPH_PROJECT_ID=cwd-proj\n")
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
+	t.Chdir(dir)
+	unset(t, "SENTGRAPH_PROJECT_ID")
+
+	if got := Load().ProjectID; got != "cwd-proj" {
+		t.Fatalf("ProjectID = %q, want cwd-proj from .env.local in the working directory", got)
+	}
+}
+
+// Keys supplied entirely through the environment need no file at all.
+func TestEnvCompleteNeedsNoFile(t *testing.T) {
+	isolate(t)
+	t.Setenv("ZEP_API_KEY", "key-123")
+	t.Setenv("ZEP_USER_ID", "dev-7")
+	t.Setenv("SENTGRAPH_PROJECT_ID", "sentoke")
+
+	cfg := Load()
+	if !cfg.EnvComplete {
+		t.Fatal("EnvComplete should be true when the environment carries every required key")
+	}
+	if cfg.EnvFilePresent {
+		t.Fatal("no .env.local exists in this directory")
+	}
+	if err := cfg.RequireProjectConfig(); err != nil {
+		t.Fatalf("environment-only configuration must pass the scope gate: %v", err)
+	}
+}
+
+// EnvComplete means "the environment configured this project", not "the keys
+// were found somehow". Keys that arrive from .env.local must leave it false --
+// the snapshot has to be taken before godotenv writes them into the process
+// environment. Without this, swapping those two lines in Load goes unnoticed.
+func TestEnvCompleteFalseWhenKeysComeFromFile(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, ".env.local"),
+		"ZEP_API_KEY=file-key\nZEP_USER_ID=file-user\nSENTGRAPH_PROJECT_ID=file-proj\n")
+	t.Setenv("CLAUDE_PROJECT_DIR", dir)
+	for _, k := range []string{"ZEP_API_KEY", "ZEP_USER_ID", "SENTGRAPH_PROJECT_ID"} {
+		unset(t, k)
+	}
+
+	cfg := Load()
+	if cfg.EnvComplete {
+		t.Fatal("EnvComplete must be false when the keys came from .env.local, not the environment")
+	}
+	if !cfg.EnvFilePresent {
+		t.Fatal("EnvFilePresent should be true")
+	}
+	if err := cfg.RequireProjectConfig(); err != nil {
+		t.Fatalf("a project with its own .env.local must pass the gate: %v", err)
+	}
+	if cfg.ProjectID != "file-proj" {
+		t.Fatalf("ProjectID = %q, want file-proj", cfg.ProjectID)
+	}
+}
+
+// Hooks tell the two failure modes apart by matching ErrProjectNotConfigured:
+// an unconfigured project is silence, a broken .env.local must be reported.
+func TestErrProjectNotConfiguredDistinguishesFailures(t *testing.T) {
+	notConfigured := (Config{}).RequireProjectConfig()
+	if !errors.Is(notConfigured, ErrProjectNotConfigured) {
+		t.Fatalf("missing configuration should match ErrProjectNotConfigured, got %v", notConfigured)
+	}
+	broken := (Config{EnvFilePresent: true, envFileErr: errors.New("boom")}).RequireProjectConfig()
+	if errors.Is(broken, ErrProjectNotConfigured) {
+		t.Fatal("a broken .env.local must NOT match ErrProjectNotConfigured, or hooks would swallow it")
+	}
+}
+
+// A .env.local that is a directory is reported as a broken file, not as a
+// missing one: "not found" while the user is looking straight at it wastes time.
+func TestEnvFileDirectoryReportedAsBroken(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, ".env.local"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLAUDE_PROJECT_DIR", dir)
+
+	cfg := Load()
+	err := cfg.RequireProjectConfig()
+	if err == nil || errors.Is(err, ErrProjectNotConfigured) {
+		t.Fatalf("a directory named .env.local should be a load error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "is a directory") {
+		t.Fatalf("error should name the cause, got %v", err)
+	}
+}
+
+// A partially set environment is not a configured project: the missing keys
+// still have to come from the project's own .env.local.
+func TestEnvPartialIsNotComplete(t *testing.T) {
+	isolate(t)
+	t.Setenv("ZEP_API_KEY", "key-123")
+	t.Setenv("ZEP_USER_ID", "dev-7")
+	t.Setenv("SENTGRAPH_PROJECT_ID", "")
+
+	cfg := Load()
+	if cfg.EnvComplete {
+		t.Fatal("EnvComplete must be false when a required key is missing")
+	}
+	if err := cfg.RequireProjectConfig(); err == nil {
+		t.Fatal("partial env without .env.local must fail the scope gate")
 	}
 }
 
@@ -172,17 +292,25 @@ func TestEnvFilePresentReported(t *testing.T) {
 	})
 }
 
-func TestRequireEnvFile(t *testing.T) {
-	if err := (Config{EnvFilePresent: true}).RequireEnvFile(); err != nil {
-		t.Fatalf("present should pass: %v", err)
+func TestRequireProjectConfig(t *testing.T) {
+	if err := (Config{EnvFilePresent: true}).RequireProjectConfig(); err != nil {
+		t.Fatalf("project .env.local should pass: %v", err)
 	}
-	if err := (Config{EnvFilePresent: false}).RequireEnvFile(); err == nil {
-		t.Fatal("absent .env.local should error")
+	if err := (Config{EnvComplete: true}).RequireProjectConfig(); err != nil {
+		t.Fatalf("complete environment should pass without a file: %v", err)
 	}
-	// A found-but-unparsable .env.local must surface the load error, not pass.
-	err := (Config{EnvFilePresent: true, envFileErr: errors.New("boom")}).RequireEnvFile()
+	if err := (Config{}).RequireProjectConfig(); err == nil {
+		t.Fatal("neither env nor .env.local should error")
+	}
+	// A found-but-unparsable .env.local must surface the load error, not pass --
+	// even when the environment would otherwise satisfy the gate, since a broken
+	// file is a setup mistake worth reporting.
+	err := (Config{EnvFilePresent: true, envFileErr: errors.New("boom")}).RequireProjectConfig()
 	if err == nil || !strings.Contains(err.Error(), "could not be loaded") {
 		t.Fatalf("load error should be surfaced, got %v", err)
+	}
+	if err := (Config{EnvComplete: true, EnvFilePresent: true, envFileErr: errors.New("boom")}).RequireProjectConfig(); err == nil {
+		t.Fatal("a broken .env.local must be reported even when the environment is complete")
 	}
 }
 
@@ -195,8 +323,8 @@ func TestLoadEnvFileSurfacesParseError(t *testing.T) {
 	if !cfg.EnvFilePresent {
 		t.Fatal("file should be reported present")
 	}
-	if err := cfg.RequireEnvFile(); err == nil {
-		t.Fatal("malformed .env.local must make RequireEnvFile error")
+	if err := cfg.RequireProjectConfig(); err == nil {
+		t.Fatal("malformed .env.local must make RequireProjectConfig error")
 	}
 }
 

@@ -23,7 +23,7 @@
 | Богатство поиска | scope edges/nodes/episodes | scope auto (optimized context block), observations, thread_summaries, episodes — **шире нашего** | — | bi-temporal фильтры valid_at/invalid_at |
 | Redaction секретов | **8 regex-паттернов до отправки** (JWT, sk-, gh*, AKIA, AIza, xox, Bearer) | не упоминается нигде (поиск по их докам — «No results found») | — | нет |
 | Auth | ZEP_API_KEY в `.env.local` проекта | только SSO: Google Workspace или Custom OIDC (Enterprise) | без ключа | свои LLM-ключи (OpenAI и др.) |
-| Скоупинг проекта | `.env.local` + граф `proj:<id>`; hook без файла молча выходит | токен жёстко привязан к проекту, инструменты не принимают user/project — **сильная модель** | — | свой инстанс = свой скоуп |
+| Скоупинг проекта | ключи из env либо `.env.local` в самой директории проекта (вверх не ищем) + граф `proj:<id>`; в ненастроенном проекте hook молча выходит | токен жёстко привязан к проекту, инструменты не принимают user/project — **сильная модель** | — | свой инстанс = свой скоуп |
 | Governance | нет (личный инструмент) | admin: read-only per connection, аккаунт-левел writes kill switch, мгновенная revocation | — | нет |
 | Доступность | self-service (brew / go install) | **contact sales**; OIDC = Enterprise | всем, marketplace | всем, experimental |
 | Поддержка/стоимость | наша: 1363 строки Go + 815 тестов | Zep | Zep | experimental, свой Docker+БД+LLM-ключи |

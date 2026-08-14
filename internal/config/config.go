@@ -1,6 +1,7 @@
 // Package config resolves runtime configuration from required environment
-// variables, optionally seeded from a per-project .env.local file so each
-// project can carry its own keys without a shared global environment.
+// variables. The environment wins; when a required key is unset, it is filled
+// from a .env.local in the project directory itself, so each project can carry
+// its own keys without a shared global environment.
 //
 // Memory scoping: a single Zep user (the developer) holds personal,
 // cross-project context; each project gets its own standalone graph. A
@@ -26,14 +27,20 @@ type Config struct {
 	UserID    string
 	ProjectID string
 
-	// EnvFilePresent reports whether a .env.local was found for this project.
-	// serve and doctor require it (RequireEnvFile) so a global (user-scope)
-	// install does not silently run in projects that are not set up.
+	// EnvFilePresent reports whether a .env.local was found in the project
+	// directory. Without one, serve and doctor refuse to run and hooks exit
+	// quietly (RequireProjectConfig), so a global (user-scope) install does not
+	// silently run in projects that are not set up.
 	EnvFilePresent bool
 
+	// EnvComplete reports that the environment alone supplied every required
+	// key, before any .env.local was read. Such a project needs no file: the
+	// caller configured it explicitly (MCP server env block, exported vars).
+	EnvComplete bool
+
 	// envFileErr is non-nil when a .env.local was found but could not be loaded
-	// (syntax/permission error). RequireEnvFile surfaces it so the user sees the
-	// real cause instead of a misleading "key is required".
+	// (syntax/permission error). RequireProjectConfig surfaces it so the user
+	// sees the real cause instead of a misleading "key is required".
 	envFileErr error
 
 	// Hook frequency / behavior toggles ("read more, write more").
@@ -45,12 +52,14 @@ type Config struct {
 	ContextTokenBudget int
 }
 
-// Load resolves configuration from the environment. A per-project .env.local
-// (searched upward from CLAUDE_PROJECT_DIR or the working directory) is loaded
-// first and takes precedence, so each project supplies its own keys without a
-// shared global environment. The three identity values are still required;
-// Validate rejects any that are empty.
+// Load resolves configuration from the environment, which always wins. Keys
+// left unset there are filled from a .env.local in the project directory
+// itself (CLAUDE_PROJECT_DIR when set, otherwise the working directory) --
+// parent directories are never consulted, so a project only ever picks up its
+// own file. The three identity values are still required; Validate rejects any
+// that are empty.
 func Load() Config {
+	envComplete := requiredSetInEnv()
 	found, envErr := loadEnvFile()
 	return Config{
 		ZepAPIKey:          os.Getenv("ZEP_API_KEY"),
@@ -61,8 +70,21 @@ func Load() Config {
 		CaptureTools:       boolEnv("SENTGRAPH_CAPTURE_TOOLS", false),
 		ContextTokenBudget: intEnv("SENTGRAPH_CONTEXT_TOKEN_BUDGET", 2000),
 		EnvFilePresent:     found,
+		EnvComplete:        envComplete,
 		envFileErr:         envErr,
 	}
+}
+
+// requiredSetInEnv reports whether the environment already carries every
+// required key. It must run before any .env.local is loaded, since that load
+// mutates the process environment.
+func requiredSetInEnv() bool {
+	for _, k := range []string{"ZEP_API_KEY", "ZEP_USER_ID", "SENTGRAPH_PROJECT_ID"} {
+		if os.Getenv(k) == "" {
+			return false
+		}
+	}
+	return true
 }
 
 // ProjectGraphID is the Zep graph_id for this project's standalone graph.
@@ -87,25 +109,37 @@ func (c Config) Validate() error {
 	}
 }
 
-// RequireEnvFile guards against global (user-scope) or accidental installs:
-// without a .env.local in the project, serve and doctor refuse to run.
-func (c Config) RequireEnvFile() error {
-	if !c.EnvFilePresent {
-		return errors.New(".env.local not found in project: sentgraph-mcp is project-scoped -- create .env.local in the project and install the plugin with --scope project")
-	}
+// ErrProjectNotConfigured reports that this directory never opted into
+// sentgraph: no required keys in the environment and no .env.local of its own.
+// Hooks match on it (errors.Is) to stay silent in unrelated projects, while a
+// different error -- a .env.local that exists but is broken -- must always be
+// shown, since that is a setup mistake in a project that did opt in.
+var ErrProjectNotConfigured = errors.New(".env.local not found in project directory: sentgraph-mcp is project-scoped -- create .env.local in the project (parent directories are not searched) or pass the keys in the environment, and install the plugin with --scope project")
+
+// RequireProjectConfig guards against global (user-scope) or accidental
+// installs: a project must configure sentgraph explicitly, either by supplying
+// every required key in the environment or by carrying its own .env.local.
+// Neither one present yields ErrProjectNotConfigured, and serve/doctor refuse
+// to run while hooks exit quietly.
+func (c Config) RequireProjectConfig() error {
 	if c.envFileErr != nil {
 		return fmt.Errorf(".env.local found but could not be loaded: %w", c.envFileErr)
 	}
-	return nil
+	if c.EnvComplete || c.EnvFilePresent {
+		return nil
+	}
+	return ErrProjectNotConfigured
 }
 
-// loadEnvFile seeds the process environment from the nearest .env.local so each
-// project can carry its own keys. It searches upward from CLAUDE_PROJECT_DIR
-// (set by Claude Code for project-scoped servers) or the working directory and
-// loads the file with godotenv (non-override): existing environment variables
-// win, the file only fills in the ones that are unset. It returns whether a
-// file was found and any load error (a found-but-unparsable file). Missing
-// files are not an error.
+// loadEnvFile seeds the process environment from the project's own .env.local
+// so each project carries its own keys. It looks in CLAUDE_PROJECT_DIR (set by
+// Claude Code for project-scoped servers) or else the working directory, and
+// only there -- parent directories are deliberately not searched, so a file
+// further up the tree can never configure an unrelated project. The file is
+// loaded with godotenv (non-override): existing environment variables win, the
+// file only fills in the ones that are unset. It returns whether a file was
+// found and any load error (a found-but-unparsable file). Missing files are not
+// an error.
 func loadEnvFile() (bool, error) {
 	base := os.Getenv("CLAUDE_PROJECT_DIR")
 	if base == "" {
@@ -115,34 +149,20 @@ func loadEnvFile() (bool, error) {
 		}
 		base = wd
 	}
-	path, ok := findUp(base, envFileName)
-	if !ok {
+	path := filepath.Join(filepath.Clean(base), envFileName)
+	info, statErr := os.Stat(path)
+	switch {
+	case statErr != nil:
 		return false, nil
+	case info.IsDir():
+		// Reported as present so the user hears about the directory sitting
+		// where the file belongs, instead of "not found" while staring at it.
+		return true, fmt.Errorf("%s is a directory, not a file", path)
 	}
 	if err := godotenv.Load(path); err != nil {
 		return true, fmt.Errorf("load %s: %w", path, err)
 	}
 	return true, nil
-}
-
-// findUp returns the path to name in the nearest ancestor directory of start.
-func findUp(start, name string) (string, bool) {
-	dir := filepath.Clean(start)
-	for {
-		if p := filepath.Join(dir, name); fileExists(p) {
-			return p, true
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", false
-		}
-		dir = parent
-	}
-}
-
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
 }
 
 func boolEnv(key string, def bool) bool {

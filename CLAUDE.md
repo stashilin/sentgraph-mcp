@@ -20,7 +20,7 @@ go test ./...                                    # все тесты
 go test ./internal/config                        # тесты одного пакета
 go test ./internal/hooks -run TestHandle         # один тест
 go vet ./...                                     # статический анализ
-go run . doctor --online                         # проверка конфига + связи с Zep (нужен .env.local)
+go run . doctor --online                         # проверка конфига + связи с Zep (из каталога проекта; нужны ключи в env или свой .env.local)
 go run ./scripts/backfill -kind day -src <day.jsonl> -user <id>   # перелив истории в память (dry-run; -apply для отправки)
 ```
 
@@ -30,7 +30,7 @@ go run ./scripts/backfill -kind day -src <day.jsonl> -user <id>   # перели
 
 Поток данных: Claude Code → (`serve` как MCP по stdio | `hook <event>` из plugin/hooks/hooks.json) → `internal/memory.Service` → `internal/zepstore.Store` → Zep Cloud.
 
-- `internal/config` — конфигурация из env, засеянная из ближайшего `.env.local` (поиск вверх от `CLAUDE_PROJECT_DIR` или cwd; godotenv non-override — реальный env побеждает). Обязательные ключи: `ZEP_API_KEY`, `ZEP_USER_ID`, `SENTGRAPH_PROJECT_ID`. Тюнинг-переменные (`SENTGRAPH_INJECT_EVERY_PROMPT`, `SENTGRAPH_PROJECT_AUTOCAPTURE`, `SENTGRAPH_CAPTURE_TOOLS`, `SENTGRAPH_CONTEXT_TOKEN_BUDGET`) парсятся, но в хуки пока не подключены (TODO в config.go).
+- `internal/config` — конфигурация из env; env всегда побеждает, а незаданные ключи добираются из `.env.local` **в самой директории проекта** (`CLAUDE_PROJECT_DIR`, иначе cwd) — вверх по дереву поиск не идёт, чужой файл этажом выше проект не настроит. Обязательные ключи: `ZEP_API_KEY`, `ZEP_USER_ID`, `SENTGRAPH_PROJECT_ID`. Тюнинг-переменные (`SENTGRAPH_INJECT_EVERY_PROMPT`, `SENTGRAPH_PROJECT_AUTOCAPTURE`, `SENTGRAPH_CAPTURE_TOOLS`, `SENTGRAPH_CONTEXT_TOKEN_BUDGET`) парсятся, но в хуки пока не подключены (TODO в config.go).
 - `internal/memory` — бизнес-логика (`Service`): identity, маршрутизация user/project, редакция секретов перед отправкой. Zep скрыт за интерфейсом `Store` — тесты подменяют его фейком.
 - `internal/zepstore` — единственный пакет, знающий про SDK `zep-go`; реализует `Store`.
 - `internal/mcpserver` — регистрирует шесть MCP-инструментов (`memory_context`, `memory_search`, `memory_history`, `memory_add_messages`, `memory_add`, `memory_forget`) поверх `memory.Service`.
@@ -40,7 +40,9 @@ go run ./scripts/backfill -kind day -src <day.jsonl> -user <id>   # перели
 
 Модель идентичности: два графа в Zep — граф пользователя (`ZEP_USER_ID`) и граф проекта (`graph_id = "proj:" + SENTGRAPH_PROJECT_ID`); один проект может охватывать несколько репозиториев. Треды — по сессиям.
 
-Контракт `.env.local` (защита от глобальной установки): `serve` и `doctor` отказываются стартовать без файла (`RequireEnvFile`); `hook` без файла молча выходит, чтобы user-scope установка не спамила ошибками в чужих проектах. Ошибка загрузки найденного файла (синтаксис/права) поднимается наружу, а не маскируется под «ключ не задан».
+Контракт настройки проекта (защита от глобальной установки), гейт `RequireProjectConfig`: проект считается настроенным, если либо все обязательные ключи пришли из env, либо в его директории лежит свой `.env.local`. Нет ни того, ни другого — гейт отдаёт `ErrProjectNotConfigured`: `serve` и `doctor` отказываются стартовать, `hook` молча выходит, чтобы user-scope установка не спамила ошибками в чужих проектах. Ошибка загрузки найденного файла (синтаксис/права) — другая ветка: она поднимается наружу всегда, даже когда env полон, и `hook` печатает её в stderr (выходя с кодом 0), иначе опечатка в файле бесшумно выключала бы память навсегда.
+
+Граница защиты: env-ветка гейта смотрит на окружение процесса, а оно одинаково во всех каталогах. Ключи, экспортированные в профиле шелла, делают «настроенным» любой каталог и сводят защиту на нет, а глобальный `SENTGRAPH_PROJECT_ID` вдобавок перебивает значение из `.env.local` проекта (non-override) и сливает разные репозитории в один граф. Env-ветка рассчитана на ключи, заданные процессу (менеджер секретов, обёртка запуска), а не на профиль шелла.
 
 ## Плагин Claude Code
 

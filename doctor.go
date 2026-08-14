@@ -22,7 +22,7 @@ func runDoctor(ctx context.Context, args []string) error {
 	}
 
 	cfg := config.Load()
-	if err := cfg.RequireEnvFile(); err != nil {
+	if err := cfg.RequireProjectConfig(); err != nil {
 		return err
 	}
 	if err := cfg.Validate(); err != nil {
