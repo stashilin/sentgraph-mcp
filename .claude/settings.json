@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "sentgraph@sentgraph-mcp": true
+  }
+}
